@@ -19,6 +19,7 @@ import org.webrtc.MediaStream;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.RendererCommon;
+import org.webrtc.RtpReceiver;
 import org.webrtc.SdpObserver;
 import org.webrtc.SessionDescription;
 import org.webrtc.SurfaceViewRenderer;
@@ -31,6 +32,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+
+
 
 public class MainActivity extends AppCompatActivity {
     static final String TAG = "MainActivity";
@@ -90,6 +93,29 @@ public class MainActivity extends AppCompatActivity {
         public void onRenegotiationNeeded() {
             Log.d(TAG, "onRenegotiationNeeded");
         }
+
+        @Override
+        public void onAddTrack(RtpReceiver rtpReceiver, MediaStream[] mediaStreams) {
+            Log.d(TAG, "onAddTrack");
+        }
+    }
+
+    private class WebSocketConnectorCallback implements WebSocketConnector.Callback {
+
+        @Override
+        public void onWebSocketMessage(String message) {
+            Log.d(TAG, "onWebSocketMessage");
+        }
+
+        @Override
+        public void onWebSocketClose() {
+            Log.d(TAG, "onWebSocketClose");
+        }
+
+        @Override
+        public void onWebSocketError(String desc) {
+            Log.d(TAG, "onWebSocketError");
+        }
     }
 
     PeerConnection peerConnection;
@@ -100,6 +126,8 @@ public class MainActivity extends AppCompatActivity {
     EglBase eglBase;
     Executor executor = Executors.newSingleThreadScheduledExecutor();
 
+    WebSocketConnectorCallback wsCallback = new WebSocketConnectorCallback();
+    WebSocketConnector wsConnector = new WebSocketConnector(wsCallback);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -189,11 +217,10 @@ public class MainActivity extends AppCompatActivity {
             public void onCreateSuccess(SessionDescription sessionDescription) {
                 Logging.d(TAG, "onCreateSuccess: " + sessionDescription.description);
 
-
-                peerConnection.setRemoteDescription(new SdpObserver() {
+                peerConnection.setLocalDescription(new SdpObserver() {
                     @Override
                     public void onCreateSuccess(SessionDescription sessionDescription) {
-                        Logging.d(TAG, "(setRemoteDescription)onCreateSuccess: " + sessionDescription.description);
+
                     }
 
                     @Override
@@ -203,58 +230,15 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onCreateFailure(String s) {
-                        Logging.d(TAG, "(setRemoteDescription)onCreateFailure: " + s);
+
                     }
 
                     @Override
                     public void onSetFailure(String s) {
-                        Logging.d(TAG, "(setRemoteDescription)onCreateFailure: " + s);
+
                     }
                 }, sessionDescription);
 
-                peerConnection.createAnswer(new SdpObserver() {
-                    @Override
-                    public void onCreateSuccess(SessionDescription sessionDescription) {
-                        Logging.d(TAG, "( peerConnection.createAnswer)onCreateSuccess: " + sessionDescription.description);
-
-                        peerConnection.setRemoteDescription(new SdpObserver() {
-                            @Override
-                            public void onCreateSuccess(SessionDescription sessionDescription) {
-                                Logging.d(TAG, "(setRemoteDescription2)onCreateSuccess: " + sessionDescription.description);
-                            }
-
-                            @Override
-                            public void onSetSuccess() {
-
-                            }
-
-                            @Override
-                            public void onCreateFailure(String s) {
-                                Logging.d(TAG, "(setRemoteDescription2)onCreateFailure: " + s);
-                            }
-
-                            @Override
-                            public void onSetFailure(String s) {
-                                Logging.d(TAG, "(setRemoteDescription2)onCreateFailure: " + s);
-                            }
-                        }, sessionDescription);
-                    }
-
-                    @Override
-                    public void onSetSuccess() {
-
-                    }
-
-                    @Override
-                    public void onCreateFailure(String s) {
-
-                    }
-
-                    @Override
-                    public void onSetFailure(String s) {
-
-                    }
-                }, sdpConst);
             }
 
             @Override
@@ -274,6 +258,8 @@ public class MainActivity extends AppCompatActivity {
         }, sdpConst);
 
 
+
+        wsConnector.connect("wss://10.0.2.2:8443");
 
 
     }
