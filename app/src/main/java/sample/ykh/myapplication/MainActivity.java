@@ -19,6 +19,8 @@ import org.webrtc.MediaStream;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
 import org.webrtc.RendererCommon;
+import org.webrtc.SdpObserver;
+import org.webrtc.SessionDescription;
 import org.webrtc.SurfaceViewRenderer;
 import org.webrtc.VideoCapturer;
 import org.webrtc.VideoRenderer;
@@ -68,6 +70,10 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onAddStream(MediaStream mediaStream) {
             Log.d(TAG, "onAddStream");
+
+            VideoTrack videoTrack = mediaStream.videoTracks.get(0);
+            videoTrack.setEnabled(true);
+            videoTrack.addRenderer(new VideoRenderer(remoteView));
         }
 
         @Override
@@ -89,6 +95,7 @@ public class MainActivity extends AppCompatActivity {
     PeerConnection peerConnection;
     PCObserver pcObserver = new PCObserver();
     SurfaceViewRenderer localView = null;
+    SurfaceViewRenderer remoteView = null;
     VideoCapturer videoCapturer;
     EglBase eglBase;
     Executor executor = Executors.newSingleThreadScheduledExecutor();
@@ -98,12 +105,12 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+//        requestWindowFeature(Window.FEATURE_NO_TITLE);
+//        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+//                | WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD | WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+//                | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+//        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+//                | View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
 
 
         setContentView(R.layout.activity_main);
@@ -115,10 +122,31 @@ public class MainActivity extends AppCompatActivity {
         List<PeerConnection.IceServer> iceServers = new ArrayList<PeerConnection.IceServer>();
         iceServers.add(new PeerConnection.IceServer("stun:stun.l.google.com:19302"));
 
-        peerConnection = factory.createPeerConnection(iceServers, new MediaConstraints(), pcObserver);
+        MediaConstraints pcConst = new MediaConstraints();
+        pcConst.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "false"));
+
+        peerConnection = factory.createPeerConnection(iceServers, pcConst, pcObserver);
         Log.d(TAG, "factory.createPeerConnection");
 
 
+        localView = (SurfaceViewRenderer)findViewById(R.id.local_video_view);
+        remoteView = (SurfaceViewRenderer)findViewById(R.id.remote_video_view);
+
+        eglBase = EglBase.create();
+        factory.setVideoHwAccelerationOptions(eglBase.getEglBaseContext(), eglBase.getEglBaseContext());
+
+        localView.init(eglBase.getEglBaseContext(), null);
+        remoteView.init(eglBase.getEglBaseContext(), null);
+
+        localView.setEnableHardwareScaler(true);
+        remoteView.setEnableHardwareScaler(true);
+
+        localView.setZOrderMediaOverlay(true);
+        localView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
+        localView.setBottom(720);
+
+        remoteView.setZOrderMediaOverlay(true);
+        remoteView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
 
 
         Camera2Enumerator camEnum = new Camera2Enumerator(this);
@@ -128,36 +156,122 @@ public class MainActivity extends AppCompatActivity {
         VideoSource videoSource = factory.createVideoSource(videoCapturer);
 
 
+
         VideoTrack videoTrack = factory.createVideoTrack("ARDAMSv0", videoSource);
-        videoTrack.setEnabled(true);
-
-
-
-        localView = (SurfaceViewRenderer)findViewById(R.id.local_video_view);
-
-        eglBase = EglBase.create();
-        factory.setVideoHwAccelerationOptions(eglBase.getEglBaseContext(), eglBase.getEglBaseContext());
-        localView.init(eglBase.getEglBaseContext(), null);
-        localView.setEnableHardwareScaler(true);
-        localView.setZOrderMediaOverlay(true);
-        localView.setScalingType(RendererCommon.ScalingType.SCALE_ASPECT_FILL);
-//        localView.setMirror(true);
-//        localView.requestLayout();
 
         videoTrack.addRenderer(new VideoRenderer(localView));
+
+
+
+        localView.setMirror(true);
+        localView.requestLayout();
+
+        remoteView.setMirror(false);
+        remoteView.requestLayout();
+
+
 
         MediaStream localMediaStream = factory.createLocalMediaStream("ARDAMS");
 
         localMediaStream.addTrack(videoTrack);
         peerConnection.addStream(localMediaStream);
 
-        executor.execute(new Runnable() {
+        videoTrack.setEnabled(true);
+        videoCapturer.startCapture(720, 480, 20);
+
+
+        final MediaConstraints sdpConst = new MediaConstraints();
+        //sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
+        sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"));
+
+        peerConnection.createOffer(new SdpObserver() {
             @Override
-            public void run() {
-                    Log.d(TAG, "Restart video source.");
-                videoCapturer.startCapture(176, 144, 20);
-                }
-        });
+            public void onCreateSuccess(SessionDescription sessionDescription) {
+                Logging.d(TAG, "onCreateSuccess: " + sessionDescription.description);
+
+
+                peerConnection.setRemoteDescription(new SdpObserver() {
+                    @Override
+                    public void onCreateSuccess(SessionDescription sessionDescription) {
+                        Logging.d(TAG, "(setRemoteDescription)onCreateSuccess: " + sessionDescription.description);
+                    }
+
+                    @Override
+                    public void onSetSuccess() {
+
+                    }
+
+                    @Override
+                    public void onCreateFailure(String s) {
+                        Logging.d(TAG, "(setRemoteDescription)onCreateFailure: " + s);
+                    }
+
+                    @Override
+                    public void onSetFailure(String s) {
+                        Logging.d(TAG, "(setRemoteDescription)onCreateFailure: " + s);
+                    }
+                }, sessionDescription);
+
+                peerConnection.createAnswer(new SdpObserver() {
+                    @Override
+                    public void onCreateSuccess(SessionDescription sessionDescription) {
+                        Logging.d(TAG, "( peerConnection.createAnswer)onCreateSuccess: " + sessionDescription.description);
+
+                        peerConnection.setRemoteDescription(new SdpObserver() {
+                            @Override
+                            public void onCreateSuccess(SessionDescription sessionDescription) {
+                                Logging.d(TAG, "(setRemoteDescription2)onCreateSuccess: " + sessionDescription.description);
+                            }
+
+                            @Override
+                            public void onSetSuccess() {
+
+                            }
+
+                            @Override
+                            public void onCreateFailure(String s) {
+                                Logging.d(TAG, "(setRemoteDescription2)onCreateFailure: " + s);
+                            }
+
+                            @Override
+                            public void onSetFailure(String s) {
+                                Logging.d(TAG, "(setRemoteDescription2)onCreateFailure: " + s);
+                            }
+                        }, sessionDescription);
+                    }
+
+                    @Override
+                    public void onSetSuccess() {
+
+                    }
+
+                    @Override
+                    public void onCreateFailure(String s) {
+
+                    }
+
+                    @Override
+                    public void onSetFailure(String s) {
+
+                    }
+                }, sdpConst);
+            }
+
+            @Override
+            public void onSetSuccess() {
+
+            }
+
+            @Override
+            public void onCreateFailure(String s) {
+                Logging.d(TAG, "onCreateFailure: " + s);
+            }
+
+            @Override
+            public void onSetFailure(String s) {
+                Logging.d(TAG, "onSetFailure: " + s);
+            }
+        }, sdpConst);
 
 
 

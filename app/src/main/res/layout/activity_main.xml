@@ -11,11 +11,24 @@
     tools:context="sample.ykh.myapplication.MainActivity">
 
     <org.webrtc.SurfaceViewRenderer
-        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:id="@+id/remote_video_view"
+        android:visibility="visible"
+        android:layout_width="wrap_content"
         android:layout_alignParentTop="true"
         android:layout_alignParentLeft="true"
         android:layout_alignParentStart="true"
+        android:layout_marginLeft="101dp"
+        android:layout_marginStart="201dp"
+        android:layout_marginTop="415dp" />
+
+    <org.webrtc.SurfaceViewRenderer
         android:id="@+id/local_video_view"
-        android:visibility="visible" />
+        android:visibility="visible"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentTop="true"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="115dp"/>
 </RelativeLayout>
