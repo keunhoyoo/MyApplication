@@ -8,6 +8,8 @@ import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.webrtc.Camera2Enumerator;
 import org.webrtc.CameraEnumerator;
 import org.webrtc.DataChannel;
@@ -47,27 +49,43 @@ public class MainActivity extends AppCompatActivity {
 
         @Override
         public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
-            Log.d(TAG, "onIceConnectionChange");
+            Log.d(TAG, "onIceConnectionChange -> " + iceConnectionState);
         }
 
         @Override
         public void onIceConnectionReceivingChange(boolean b) {
-            Log.d(TAG, "onIceConnectionReceivingChange");
+            Log.d(TAG, "onIceConnectionReceivingChange -> " + b);
         }
 
         @Override
         public void onIceGatheringChange(PeerConnection.IceGatheringState iceGatheringState) {
-            Log.d(TAG, "onIceGatheringChange");
+            Log.d(TAG, "onIceGatheringChange -> " + iceGatheringState);
         }
 
         @Override
         public void onIceCandidate(IceCandidate iceCandidate) {
-            Log.d(TAG, "onIceCandidate");
+            Log.d(TAG, "onIceCandidate -> " + iceCandidate);
+
+            // {"ice":{"candidate":"candidate:2682507131 1 udp 2122255103 2001::9d38:90d7:201f:9e11:2c11:9387 63363 typ host generation 0 ufrag PszP network-id 4 network-cost 50","sdpMid":"audio","sdpMLineIndex":0}}
+            try {
+                JSONObject jsonIce = new JSONObject();
+
+                jsonIce.put("candidate", iceCandidate.sdp);
+                jsonIce.put("sdpMid", iceCandidate.sdpMid);
+                jsonIce.put("sdpMLineIndex", iceCandidate.sdpMLineIndex);
+
+                socketIo.send("offerIce", jsonIce.toString());
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+
+            peerConnection.addIceCandidate(iceCandidate);
         }
 
         @Override
         public void onIceCandidatesRemoved(IceCandidate[] iceCandidates) {
-            Log.d(TAG, "onIceCandidatesRemoved");
+            Log.d(TAG, "onIceCandidatesRemoved -> " + iceCandidates);
         }
 
         @Override
@@ -100,21 +118,76 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class WebSocketConnectorCallback implements WebSocketConnector.Callback {
+    private class SignalEventHandler implements SocketIoClient.EventHandler {
 
         @Override
-        public void onWebSocketMessage(String message) {
-            Log.d(TAG, "onWebSocketMessage");
+        public void onAnswerSdp(String remoteSdp) {
+            Log.d(TAG, "onAnswerSdp -> " + remoteSdp);
+
+            // {"remoteSdp":{"type":"answer","sdp":"v=0\r\no=- 3971489185360764760 2 IN IP4 127.0.0.1\
+            // r\ns=-\r\nt=0 0\r\na=group:BUNDLE video\r\na=msid-semantic: WMS T7qHCpV2Wt7W2rU1AqiBV5N1ihW794quAWAm\r\nm=video 9 UDP/T
+            // LS/RTP/SAVPF 96 98 100 127 97 99 101\r\nc=IN IP4 0.0.0.0\r\na=rtcp:9 IN IP4 0.0.0.0\r\na=ice-ufrag:lu6n\r\na=ice-pwd:aIb
+            // 8RoQUpa8uHqYqxu2GpZI/\r\na=fingerprint:sha-256 89:01:8C:15:E2:58:C9:B5:54:83:29:2F:B0:0A:75:E8:CD:72:1D:5D:EE:C5:5D:76:A5:27
+            // :4A:44:1E:8A:4A:6F\r\na=setup:active\r\na=mid:video\r\na=extmap:2 urn:ietf:params:rtp-hdrext:toffset\r\na=extmap:3 http://www.
+            // webrtc.org/experiments/rtp-hdrext/abs-send-time\r\na=extmap:4 urn:3gpp:video-orientation\r\na=extmap:5 http://www.ietf.org/id/d
+            // raft-holmer-rmcat-transport-wide-cc-extensions-01\r\na=extmap:6 http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\n
+            // a=sendrecv\r\na=rtcp-mux\r\na=rtcp-rsize\r\na=rtpmap:96 VP8/90000\r\na=rtcp-fb:96 ccm fir\r\na=rtcp-fb:96 nack\r\na=rtcp-fb:96
+            // nack pli\r\na=rtcp-fb:96 goog-remb\r\na=rtcp-fb:96 transport-cc\r\na=rtpmap:98 VP9/90000\r\na=rtcp-fb:98 ccm fir\r\na=rtcp-fb:98 nack\r\
+            // na=rtcp-fb:98 nack pli\r\na=rtcp-fb:98 goog-remb\r\na=rtcp-fb:98 transport-cc\r\na=rtpmap:100 red/90000\r\na=rtpmap:127 ulpfec/90000\r\n
+            // a=rtpmap:97 rtx/90000\r\na=fmtp:97 apt=96\r\na=rtpmap:99 rtx/90000\r\na=fmtp:99 apt=98\r\na=rtpmap:101 rtx/90000\r\na=fmtp:101 apt=100\r\na=ssrc-group:FID 660055680 3903518476\r\na=ssrc:660055680 cname:2mp6gPjZLb1RwDQT\r\na=ssrc:660055680 msid:T7qHCpV2Wt7W2rU1AqiBV5N1ihW794quAWAm 99c0bb20-b45e-4e10-9fc8-ffdfe6cf758a\r\na=ssrc:660055680 mslabel:T7qHCpV2Wt7W2rU1AqiBV5N1ihW794quAWAm\r\na=ssrc:660055680 label:99c0bb20-b45e-4e10-9fc8-ffdfe6cf758a\r\na=ssrc:3903518476 cname:2mp6gPjZLb1RwDQT\r\na=ssrc:3903518476 msid:T7qHCpV2Wt7W2rU1AqiBV5N1ihW794quAWAm 99c0bb20-b45e-4e10-9fc8-ffdfe6cf758a\r\na=ssrc:3903518476 mslabel:T7qHCpV2Wt7W2rU1AqiBV5N1ihW794quAWAm\r\na=ssrc:3903518476 label:99c0bb20-b45e-4e10-9fc8-ffdfe6cf758a\r\n"}}
+
+
+            try {
+                JSONObject jsonRemoteSdp = new JSONObject(remoteSdp);
+                JSONObject jsonSdp = jsonRemoteSdp.getJSONObject("remoteSdp");
+
+                peerConnection.setRemoteDescription(new SdpObserver() {
+                    @Override
+                    public void onCreateSuccess(SessionDescription sessionDescription) {
+                        Log.d(TAG, "setRemoteDescription / onCreateSuccess -> " + sessionDescription);
+                    }
+
+                    @Override
+                    public void onSetSuccess() {
+                        Log.d(TAG, "setRemoteDescription / onSetSuccess");
+                    }
+
+                    @Override
+                    public void onCreateFailure(String s) {
+                        Log.d(TAG, "setRemoteDescription / onCreateFailure ->" + s);
+                    }
+
+                    @Override
+                    public void onSetFailure(String s) {
+                        Log.d(TAG, "setRemoteDescription / onSetFailure -> " + s);
+                    }
+                }, new SessionDescription(SessionDescription.Type.ANSWER, jsonSdp.getString("sdp")));
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+
         }
 
         @Override
-        public void onWebSocketClose() {
-            Log.d(TAG, "onWebSocketClose");
-        }
+        public void onAnswerIce(String remoteIce) {
+            Log.d(TAG, "onAnswerIce -> " + remoteIce);
 
-        @Override
-        public void onWebSocketError(String desc) {
-            Log.d(TAG, "onWebSocketError");
+            // {"ice":{"candidate":"candidate:463174799 1 udp 2122129151 192.168.180.1 54506 typ host generation 0 ufrag lu6n network-id
+            // 2 network-cost 10","sdpMid":"video","sdpMLineIndex":0}}
+
+            try {
+                JSONObject jsonIce = new JSONObject(remoteIce).getJSONObject("ice");
+
+                peerConnection.addIceCandidate(new IceCandidate(
+                        jsonIce.getString("sdpMid"), jsonIce.getInt("sdpMLineIndex"), jsonIce.getString("candidate")));
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+
         }
     }
 
@@ -126,8 +199,8 @@ public class MainActivity extends AppCompatActivity {
     EglBase eglBase;
     Executor executor = Executors.newSingleThreadScheduledExecutor();
 
-    WebSocketConnectorCallback wsCallback = new WebSocketConnectorCallback();
-    WebSocketConnector wsConnector = new WebSocketConnector(wsCallback);
+    SocketIoClient socketIo;
+    SignalEventHandler signalEventHandler = new SignalEventHandler();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -143,6 +216,10 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
 
+        socketIo = new SocketIoClient(signalEventHandler);
+        socketIo.connect("http://13.124.155.2:8888/");
+
+
         PeerConnectionFactory.initializeAndroidGlobals(this, true, true, true);
 
         PeerConnectionFactory factory = new PeerConnectionFactory(new PeerConnectionFactory.Options());
@@ -151,7 +228,7 @@ public class MainActivity extends AppCompatActivity {
         iceServers.add(new PeerConnection.IceServer("stun:stun.l.google.com:19302"));
 
         MediaConstraints pcConst = new MediaConstraints();
-        pcConst.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "false"));
+        pcConst.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
 
         peerConnection = factory.createPeerConnection(iceServers, pcConst, pcObserver);
         Log.d(TAG, "factory.createPeerConnection");
@@ -214,28 +291,40 @@ public class MainActivity extends AppCompatActivity {
 
         peerConnection.createOffer(new SdpObserver() {
             @Override
-            public void onCreateSuccess(SessionDescription sessionDescription) {
-                Logging.d(TAG, "onCreateSuccess: " + sessionDescription.description);
+            public void onCreateSuccess(final SessionDescription sessionDescription) {
+                Logging.d(TAG, "createOffer / onCreateSuccess -> " + sessionDescription.description);
 
                 peerConnection.setLocalDescription(new SdpObserver() {
                     @Override
                     public void onCreateSuccess(SessionDescription sessionDescription) {
-
+                        Log.d(TAG, "setLocalDescription / onCreateSuccess -> " + sessionDescription);
                     }
 
                     @Override
                     public void onSetSuccess() {
+                        Log.d(TAG, "setLocalDescription / onSetSuccess");
+
+
+                        try {
+                            JSONObject jsonSdp = new JSONObject();
+                            jsonSdp.put("type", sessionDescription.type.canonicalForm());
+                            jsonSdp.put("sdp", sessionDescription.description);
+
+                            socketIo.send("offerSdp", jsonSdp.toString());
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
 
                     }
 
                     @Override
                     public void onCreateFailure(String s) {
-
+                        Log.d(TAG, "setLocalDescription / onCreateFailure -> " + s);
                     }
 
                     @Override
                     public void onSetFailure(String s) {
-
+                        Log.d(TAG, "setLocalDescription / onSetFailure -> " + s);
                     }
                 }, sessionDescription);
 
@@ -243,25 +332,19 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onSetSuccess() {
-
+                Log.d(TAG, "createOffer / onSetSuccess");
             }
 
             @Override
             public void onCreateFailure(String s) {
-                Logging.d(TAG, "onCreateFailure: " + s);
+                Log.d(TAG, "createOffer / onCreateFailure -> " + s);
             }
 
             @Override
             public void onSetFailure(String s) {
-                Logging.d(TAG, "onSetFailure: " + s);
+                Log.d(TAG, "createOffer / onSetFailure" + s);
             }
         }, sdpConst);
-
-
-
-        wsConnector.connect("wss://10.0.2.2:8443");
-
-
     }
 
     private VideoCapturer createCameraCapturer(CameraEnumerator enumerator) {
@@ -296,4 +379,38 @@ public class MainActivity extends AppCompatActivity {
         return null;
     }
 
+    @Override
+    protected void onStart() {
+        Log.d(TAG, "onStart");
+        // The activity is about to become visible.
+        super.onStart();
+    }
+
+    @Override
+    protected void onResume() {
+        Log.d(TAG, "onResume");
+        // The activity has become visible (it is now "resumed").
+        super.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        Log.d(TAG, "onPause");
+        // Another activity is taking focus (this activity is about to be "paused").
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        Log.d(TAG, "onStop");
+        // The activity is no longer visible (it is now "stopped")
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        Log.d(TAG, "onDestroy");
+        // The activity is about to be destroyed.
+        super.onDestroy();
+    }
 }
