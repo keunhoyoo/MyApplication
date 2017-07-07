@@ -1,5 +1,6 @@
 package sample.ykh.myapplication;
 
+import android.app.Dialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -7,6 +8,8 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.Toast;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -39,6 +42,7 @@ import java.util.concurrent.Executors;
 
 public class MainActivity extends AppCompatActivity {
     static final String TAG = "MainActivity";
+    private Toast logToast;
 
     private class PCObserver implements PeerConnection.Observer {
 
@@ -74,7 +78,11 @@ public class MainActivity extends AppCompatActivity {
                 jsonIce.put("sdpMid", iceCandidate.sdpMid);
                 jsonIce.put("sdpMLineIndex", iceCandidate.sdpMLineIndex);
 
-                socketIo.send("offerIce", jsonIce.toString());
+                if (isOffer) {
+                    socketIo.send("offerIce", jsonIce.toString());
+                } else {
+                    socketIo.send("answerIce", jsonIce.toString());
+                }
             } catch (JSONException e) {
                 e.printStackTrace();
             }
@@ -119,6 +127,187 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class SignalEventHandler implements SocketIoClient.EventHandler {
+
+        @Override
+        public void onCreatedRoom(String token, String msg) {
+            Log.d(TAG, "onCreatedRoom -> " + token + "," + msg);
+
+            final MediaConstraints sdpConst = new MediaConstraints();
+            //sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
+            sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"));
+
+
+            peerConnection.createOffer(new SdpObserver() {
+                @Override
+                public void onCreateSuccess(final SessionDescription sessionDescription) {
+                    Log.d(TAG, "createOffer / onCreateSuccess -> " + sessionDescription.description);
+
+                    peerConnection.setLocalDescription(new SdpObserver() {
+                        @Override
+                        public void onCreateSuccess(SessionDescription sessionDescription) {
+                            Log.d(TAG, "setLocalDescription / onCreateSuccess -> " + sessionDescription);
+                        }
+
+                        @Override
+                        public void onSetSuccess() {
+                            Log.d(TAG, "setLocalDescription / onSetSuccess");
+
+
+                            try {
+                                JSONObject jsonSdp = new JSONObject();
+                                jsonSdp.put("type", sessionDescription.type.canonicalForm());
+                                jsonSdp.put("sdp", sessionDescription.description);
+
+                                socketIo.send("offerSdp", jsonSdp.toString());
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+
+                        }
+
+                        @Override
+                        public void onCreateFailure(String s) {
+                            Log.d(TAG, "setLocalDescription / onCreateFailure -> " + s);
+                        }
+
+                        @Override
+                        public void onSetFailure(String s) {
+                            Log.d(TAG, "setLocalDescription / onSetFailure -> " + s);
+                        }
+                    }, sessionDescription);
+
+                }
+
+                @Override
+                public void onSetSuccess() {
+                    Log.d(TAG, "createOffer / onSetSuccess");
+                }
+
+                @Override
+                public void onCreateFailure(String s) {
+                    Log.d(TAG, "createOffer / onCreateFailure -> " + s);
+                }
+
+                @Override
+                public void onSetFailure(String s) {
+                    Log.d(TAG, "createOffer / onSetFailure" + s);
+                }
+            }, sdpConst);
+
+        }
+
+        @Override
+        public void onOfferSdp(String offerSdp) {
+            Log.d(TAG, "onOfferSdp -> " + offerSdp);
+
+            JSONObject jsonRemoteSdp = null;
+            try {
+                jsonRemoteSdp = new JSONObject(offerSdp);
+
+            JSONObject jsonSdp = jsonRemoteSdp.getJSONObject("offerSdp");
+
+            peerConnection.setRemoteDescription(new SdpObserver() {
+                @Override
+                public void onCreateSuccess(SessionDescription sessionDescription) {
+                    Log.d(TAG, "setRemoteDescription / onCreateSuccess -> " + sessionDescription);
+                }
+
+                @Override
+                public void onSetSuccess() {
+                    Log.d(TAG, "setRemoteDescription / onSetSuccess");
+
+                    final MediaConstraints sdpConst = new MediaConstraints();
+                    //sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
+                    sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"));
+
+                    peerConnection.createAnswer(new SdpObserver() {
+                        @Override
+                        public void onCreateSuccess(final SessionDescription sessionDescription2) {
+                            Log.d(TAG, "setRemoteDescription / onSetSuccess / createAnswer / onCreateSuccess -> " + sessionDescription2);
+                            peerConnection.setLocalDescription(new SdpObserver() {
+                                @Override
+                                public void onCreateSuccess(SessionDescription sessionDescription) {
+
+                                }
+                                @Override
+                                public void onSetSuccess() {
+                                    Log.d(TAG, "setLocalDescription / onSetSuccess");
+
+
+                                    try {
+                                        JSONObject jsonSdp = new JSONObject();
+                                        jsonSdp.put("type", sessionDescription2.type.canonicalForm());
+                                        jsonSdp.put("sdp", sessionDescription2.description);
+
+                                        socketIo.send("answerSdp", jsonSdp.toString());
+                                    } catch (JSONException e) {
+                                        e.printStackTrace();
+                                    }
+
+                                }
+
+                                @Override
+                                public void onCreateFailure(String s) {
+
+                                }
+
+                                @Override
+                                public void onSetFailure(String s) {
+
+                                }
+                            }, sessionDescription2);
+                        }
+
+                        @Override
+                        public void onSetSuccess() {
+
+                        }
+
+                        @Override
+                        public void onCreateFailure(String s) {
+
+                        }
+
+                        @Override
+                        public void onSetFailure(String s) {
+
+                        }
+                    }, sdpConst);
+
+                }
+
+                @Override
+                public void onCreateFailure(String s) {
+                    Log.d(TAG, "setRemoteDescription / onCreateFailure -> " + s);
+                }
+
+                @Override
+                public void onSetFailure(String s) {
+                    Log.d(TAG, "setRemoteDescription / onSetFailure -> " + s);
+                }
+            }, new SessionDescription(SessionDescription.Type.OFFER, jsonSdp.getString("sdp")));
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        public void onOfferIce(String offerIce) {
+            Log.d(TAG, "onOfferIce -> " + offerIce);
+
+
+            try {
+                JSONObject jsonIce = new JSONObject(offerIce);
+
+                peerConnection.addIceCandidate(new IceCandidate(
+                        jsonIce.getString("sdpMid"), jsonIce.getInt("sdpMLineIndex"), jsonIce.getString("candidate")));
+
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+
+        }
 
         @Override
         public void onAnswerSdp(String remoteSdp) {
@@ -178,7 +367,7 @@ public class MainActivity extends AppCompatActivity {
             // 2 network-cost 10","sdpMid":"video","sdpMLineIndex":0}}
 
             try {
-                JSONObject jsonIce = new JSONObject(remoteIce).getJSONObject("ice");
+                JSONObject jsonIce = new JSONObject(remoteIce);
 
                 peerConnection.addIceCandidate(new IceCandidate(
                         jsonIce.getString("sdpMid"), jsonIce.getInt("sdpMLineIndex"), jsonIce.getString("candidate")));
@@ -199,6 +388,9 @@ public class MainActivity extends AppCompatActivity {
     EglBase eglBase;
     Executor executor = Executors.newSingleThreadScheduledExecutor();
 
+    boolean isOffer = false;
+    String token = "";
+
     SocketIoClient socketIo;
     SignalEventHandler signalEventHandler = new SignalEventHandler();
 
@@ -216,8 +408,29 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_main);
 
+
+        Button buttonCreate = (Button)findViewById(R.id.button_create);
+        buttonCreate.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                isOffer = true;
+                socketIo.send("create", "");
+            }
+        });
+
+        Button buttonJoin = (Button)findViewById(R.id.button_join);
+        buttonJoin.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                isOffer = false;
+                socketIo.send("join", "");
+            }
+        });
+
+
         socketIo = new SocketIoClient(signalEventHandler);
-        socketIo.connect("http://13.124.155.2:8888/");
+        //socketIo.connect("http://13.124.155.2:8888/");
+        socketIo.connect("http://192.168.0.4:8888/");
 
 
         PeerConnectionFactory.initializeAndroidGlobals(this, true, true, true);
@@ -231,7 +444,7 @@ public class MainActivity extends AppCompatActivity {
         pcConst.optional.add(new MediaConstraints.KeyValuePair("DtlsSrtpKeyAgreement", "true"));
 
         peerConnection = factory.createPeerConnection(iceServers, pcConst, pcObserver);
-        Log.d(TAG, "factory.createPeerConnection");
+        logAndToast("factory.createPeerConnection");
 
 
         localView = (SurfaceViewRenderer)findViewById(R.id.local_video_view);
@@ -285,76 +498,18 @@ public class MainActivity extends AppCompatActivity {
         videoCapturer.startCapture(720, 480, 20);
 
 
-        final MediaConstraints sdpConst = new MediaConstraints();
-        //sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
-        sdpConst.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", "true"));
-
-        peerConnection.createOffer(new SdpObserver() {
-            @Override
-            public void onCreateSuccess(final SessionDescription sessionDescription) {
-                Logging.d(TAG, "createOffer / onCreateSuccess -> " + sessionDescription.description);
-
-                peerConnection.setLocalDescription(new SdpObserver() {
-                    @Override
-                    public void onCreateSuccess(SessionDescription sessionDescription) {
-                        Log.d(TAG, "setLocalDescription / onCreateSuccess -> " + sessionDescription);
-                    }
-
-                    @Override
-                    public void onSetSuccess() {
-                        Log.d(TAG, "setLocalDescription / onSetSuccess");
 
 
-                        try {
-                            JSONObject jsonSdp = new JSONObject();
-                            jsonSdp.put("type", sessionDescription.type.canonicalForm());
-                            jsonSdp.put("sdp", sessionDescription.description);
-
-                            socketIo.send("offerSdp", jsonSdp.toString());
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-
-                    }
-
-                    @Override
-                    public void onCreateFailure(String s) {
-                        Log.d(TAG, "setLocalDescription / onCreateFailure -> " + s);
-                    }
-
-                    @Override
-                    public void onSetFailure(String s) {
-                        Log.d(TAG, "setLocalDescription / onSetFailure -> " + s);
-                    }
-                }, sessionDescription);
-
-            }
-
-            @Override
-            public void onSetSuccess() {
-                Log.d(TAG, "createOffer / onSetSuccess");
-            }
-
-            @Override
-            public void onCreateFailure(String s) {
-                Log.d(TAG, "createOffer / onCreateFailure -> " + s);
-            }
-
-            @Override
-            public void onSetFailure(String s) {
-                Log.d(TAG, "createOffer / onSetFailure" + s);
-            }
-        }, sdpConst);
     }
 
     private VideoCapturer createCameraCapturer(CameraEnumerator enumerator) {
         final String[] deviceNames = enumerator.getDeviceNames();
 
         // First, try to find front facing camera
-        Logging.d(TAG, "Looking for front facing cameras.");
+        logAndToast("Looking for front facing cameras.");
         for (String deviceName : deviceNames) {
             if (enumerator.isFrontFacing(deviceName)) {
-                Logging.d(TAG, "Creating front facing camera capturer. " + deviceName);
+                logAndToast("Creating front facing camera capturer. " + deviceName);
                 VideoCapturer videoCapturer = enumerator.createCapturer(deviceName, null);
 
                 if (videoCapturer != null) {
@@ -364,10 +519,10 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Front facing camera not found, try something else
-        Logging.d(TAG, "Looking for other cameras.");
+        logAndToast("Looking for other cameras.");
         for (String deviceName : deviceNames) {
             if (!enumerator.isFrontFacing(deviceName)) {
-                Logging.d(TAG, "Creating other camera capturer.");
+                logAndToast("Creating other camera capturer.");
                 VideoCapturer videoCapturer = enumerator.createCapturer(deviceName, null);
 
                 if (videoCapturer != null) {
@@ -381,36 +536,45 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onStart() {
-        Log.d(TAG, "onStart");
+        logAndToast("onStart");
         // The activity is about to become visible.
         super.onStart();
     }
 
     @Override
     protected void onResume() {
-        Log.d(TAG, "onResume");
+        logAndToast("onResume");
         // The activity has become visible (it is now "resumed").
         super.onResume();
     }
 
     @Override
     protected void onPause() {
-        Log.d(TAG, "onPause");
+        logAndToast("onPause");
         // Another activity is taking focus (this activity is about to be "paused").
         super.onPause();
     }
 
     @Override
     protected void onStop() {
-        Log.d(TAG, "onStop");
+        logAndToast("onStop");
         // The activity is no longer visible (it is now "stopped")
         super.onStop();
     }
 
     @Override
     protected void onDestroy() {
-        Log.d(TAG, "onDestroy");
+        logAndToast("onDestroy");
         // The activity is about to be destroyed.
         super.onDestroy();
+    }
+
+    private void logAndToast(String msg) {
+        Log.d(TAG, msg);
+        if (logToast != null) {
+            logToast.cancel();
+        }
+        logToast = Toast.makeText(this, msg, Toast.LENGTH_SHORT);
+        logToast.show();
     }
 }

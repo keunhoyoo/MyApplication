@@ -20,6 +20,9 @@ public class SocketIoClient {
 
 
     public interface EventHandler {
+        void onCreatedRoom(final String token, final String msg);
+        void onOfferSdp(final String offerSdp);
+        void onOfferIce(final String offerIce);
         void onAnswerSdp(final String remoteSdp);
         void onAnswerIce(final String remoteIce);
     }
@@ -41,6 +44,14 @@ public class SocketIoClient {
                 }
             });
 
+            socket.on("createdRoom", new Emitter.Listener() {
+                @Override
+                public void call(Object... args) {
+                    Log.d(TAG, "socket.io - createdRoom");
+                    eventHandler.onCreatedRoom((String)args[0], (String)args[1]);
+                }
+            });
+
             socket.on("answerSdp", new Emitter.Listener() {
                 @Override
                 public void call(Object... args) {
@@ -54,6 +65,22 @@ public class SocketIoClient {
                 public void call(Object... args) {
                     Log.d(TAG, "socket.io - answerIce");
                     eventHandler.onAnswerIce((String)args[0]);
+                }
+            });
+
+            socket.on("offerSdp", new Emitter.Listener() {
+                @Override
+                public void call(Object... args) {
+                    Log.d(TAG, "socket.io - offerSdp");
+                    eventHandler.onOfferSdp((String)args[0]);
+                }
+            });
+
+            socket.on("offerIce", new Emitter.Listener() {
+                @Override
+                public void call(Object... args) {
+                    Log.d(TAG, "socket.io - offerIce");
+                    eventHandler.onOfferIce((String)args[0]);
                 }
             });
 
