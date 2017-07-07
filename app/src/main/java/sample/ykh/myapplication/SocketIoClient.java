@@ -6,8 +6,21 @@ import com.github.nkzawa.emitter.Emitter;
 import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
+import java.security.Security;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 /**
  * Created by ykh on 2017-06-29.
@@ -35,7 +48,21 @@ public class SocketIoClient {
 
     public void connect(final String url) {
         try {
-            socket = IO.socket(new URI(url));
+
+            SSLContext sc = SSLContext.getInstance("TLS");
+            sc.init(null, trustAllCerts, new SecureRandom());
+            IO.setDefaultSSLContext(sc);
+            HttpsURLConnection.setDefaultHostnameVerifier(new RelaxedHostNameVerifier());
+
+            // socket options
+            IO.Options opts = new IO.Options();
+            opts.forceNew = true;
+            opts.reconnection = false;
+            opts.secure = true;
+            opts.sslContext = sc;
+
+            socket = IO.socket(new URI(url), opts);
+
 
             socket.on("hi", new Emitter.Listener() {
                 @Override
@@ -85,8 +112,8 @@ public class SocketIoClient {
             });
 
             socket.connect();
-        } catch (URISyntaxException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            Log.d(TAG, e.toString());
         }
     }
 
@@ -100,5 +127,26 @@ public class SocketIoClient {
             socket.disconnect();
         }
         super.finalize();
+    }
+
+
+    private TrustManager[] trustAllCerts = new TrustManager[] { new X509TrustManager() {
+        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+            return new java.security.cert.X509Certificate[] {};
+        }
+
+        public void checkClientTrusted(X509Certificate[] chain,
+                                       String authType) throws CertificateException {
+        }
+
+        public void checkServerTrusted(X509Certificate[] chain,
+                                       String authType) throws CertificateException {
+        }
+    } };
+
+    public static class RelaxedHostNameVerifier implements HostnameVerifier {
+        public boolean verify(String hostname, SSLSession session) {
+            return true;
+        }
     }
 }

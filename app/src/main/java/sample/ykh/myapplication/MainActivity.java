@@ -430,7 +430,9 @@ public class MainActivity extends AppCompatActivity {
 
         socketIo = new SocketIoClient(signalEventHandler);
         //socketIo.connect("http://13.124.155.2:8888/");
-        socketIo.connect("http://192.168.0.4:8888/");
+        //socketIo.connect("http://192.168.0.4:8888/");
+        //socketIo.connect("https://192.168.0.4:443/");
+        socketIo.connect("https://52.79.44.127:443/");
 
 
         PeerConnectionFactory.initializeAndroidGlobals(this, true, true, true);
